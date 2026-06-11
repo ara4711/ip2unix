@@ -78,18 +78,31 @@ subdir('src')
 
 gen_extra_args = cc.cmd_array() + lib_cflags + cflags + ['--', '@INPUT@']
 
-gen_sym_map = [python, script_gensyms, '--map']
-sym_map = custom_target('symmap', input: lib_sources, output: 'symbols.map',
-                        command: gen_sym_map + gen_extra_args, capture: true)
+if host_machine.system() == 'darwin'
+  # ld64 has neither linker scripts nor version scripts. Symbol overriding
+  # is done via dyld interpose tuples in a generated source file instead.
+  gen_interpose = [python, script_gensyms, '--interpose']
+  interpose_src = custom_target('interpose', input: lib_sources,
+                                output: 'interpose.cc',
+                                command: gen_interpose + gen_extra_args,
+                                capture: true)
+  lib_sources += interpose_src
+  lib_link_depends = []
+else
+  gen_sym_map = [python, script_gensyms, '--map']
+  sym_map = custom_target('symmap', input: lib_sources, output: 'symbols.map',
+                          command: gen_sym_map + gen_extra_args, capture: true)
 
-gen_ldscript = [python, script_gensyms, '--ldscript']
-ldscript = custom_target('ldscript', input: lib_sources, output: 'ldscript',
-                         command: gen_ldscript + gen_extra_args, capture: true)
+  gen_ldscript = [python, script_gensyms, '--ldscript']
+  ldscript = custom_target('ldscript', input: lib_sources, output: 'ldscript',
+                           command: gen_ldscript + gen_extra_args, capture: true)
 
-lib_ldflags += [
-  '-Wl,--version-script,@0@'.format(sym_map.full_path()),
-  ldscript.full_path()
-]
+  lib_ldflags += [
+    '-Wl,--version-script,@0@'.format(sym_map.full_path()),
+    ldscript.full_path()
+  ]
+  lib_link_depends = [sym_map, ldscript]
+endif
 
 man_input = files('README.adoc')
 
@@ -184,7 +197,7 @@ endif
 
 libip2unix = shared_library('ip2unix', lib_sources, install: true,
                             dependencies: deps,
-                            link_depends: [sym_map, ldscript],
+                            link_depends: lib_link_depends,
                             cpp_args: lib_cflags + cflags,
                             link_args: lib_ldflags,
                             include_directories: includes)

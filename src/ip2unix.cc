@@ -32,7 +32,11 @@ static std::optional<std::string> get_preload_libpath(void)
     return std::string(info.dli_fname);
 }
 
+#ifdef __APPLE__
+#define PRELOAD_ENV_VAR "DYLD_INSERT_LIBRARIES"
+#else
 #define PRELOAD_ENV_VAR "LD_PRELOAD"
+#endif
 
 static bool run_preload(std::vector<Rule> &rules, char *argv[])
 {

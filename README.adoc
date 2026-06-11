@@ -42,7 +42,7 @@ ifndef::manmanual[]
 :xt_owner: pass:attributes,quotes[{xt_owner_url}[iptables owner module]]
 :socat: pass:attributes,quotes[http://www.dest-unreach.org/socat/[*socat*]]
 
-:LD_PRELOAD: pass:attributes,quotes[*LD_PRELOAD* ({1}[*ld.so*(8)])]
+:LD_PRELOAD: pass:attributes,quotes[*LD_PRELOAD* ({1}[*ld.so*(8)]), or *DYLD_INSERT_LIBRARIES* on macOS]
 :syscall_accept: pass:attributes,quotes[{2}[*accept*(2)]]
 :systemd_socket: pass:attributes,quotes[{3}[*systemd.socket*(5)]]
 :man_glob: pass:attributes,quotes[{5}[*glob*(7)]]
@@ -51,7 +51,7 @@ ifndef::manmanual[]
 :copy: (C) 2018 aszlig
 endif::[]
 ifdef::manmanual[]
-:LD_PRELOAD: pass:quotes[*LD_PRELOAD* (see *ld.so*(8))]
+:LD_PRELOAD: pass:quotes[*LD_PRELOAD* (see *ld.so*(8)), or *DYLD_INSERT_LIBRARIES* on macOS]
 :syscall_accept: pass:quotes[*accept*(2)]
 :systemd_socket: pass:quotes[*systemd.socket*(5)]
 :man_glob: pass:quotes[*glob*(7)]
@@ -73,7 +73,7 @@ ifdef::manmanual[]
 endif::manmanual[]
 
 Executes a program and converts IP to Unix domain sockets at runtime via
-{LD_PRELOAD} based on a list of rules, either given via short command line
+{LD_PRELOAD}, based on a list of rules, either given via short command line
 options (see {rulespec}) or via a file containing a list of rules separated via
 newline. The first matching rule causes *ip2unix* to replace the current IP
 socket with a Unix domain socket based on the options given. For example if a

@@ -32,9 +32,14 @@ struct Socket : std::enable_shared_from_this<Socket>
 
     /* If we find a socket in Socket::registry, call the first function,
      * otherwise call the second function (providing default value).
+     *
+     * Callables are deduced template params, not std::function, to avoid
+     * heap allocation here: these wrappers can be re-entered from inside the
+     * allocator (isatty() -> ioctl() during malloc init), where allocating
+     * would corrupt the half-initialised allocator.
      */
-    template<typename T>
-    static T when(int fd, std::function<T(Ptr)> f, std::function<T(void)> d) {
+    template<typename T, typename F, typename D>
+    static T when(int fd, F f, D d) {
         std::unique_lock<std::mutex> lock(Socket::registry_mutex);
         std::optional<Ptr> sock = Socket::find(fd);
 
@@ -46,7 +51,8 @@ struct Socket : std::enable_shared_from_this<Socket>
     }
 
     /* Same as the previous function, but without a default value. */
-    static void when(int fd, const std::function<void(Ptr)> &f) {
+    template<typename F>
+    static void when(int fd, F f) {
         std::scoped_lock<std::mutex> lock(Socket::registry_mutex);
         std::optional<Ptr> sock = Socket::find(fd);
         if (sock) f(sock.value());

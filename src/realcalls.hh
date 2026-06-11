@@ -10,6 +10,7 @@
 #include <dlfcn.h>
 #include <errno.h>
 #include <stdlib.h>
+#include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -61,6 +62,22 @@ namespace real {
     template <typename Self, typename Ret, typename... FunArgs>
     using DlsymFunVaArgs = DlsymFunBase<Self, Ret(FunArgs..., ...)>;
 
+#ifdef __APPLE__
+/* On Darwin dlsym(RTLD_NEXT, ...) resolves through the interpose tuples
+ * back to our own wrapper (infinite recursion). Direct references from the
+ * interposing image are exempt, so call libc directly instead.
+ */
+#define DLSYM_FUN(name, ...) IP2UNIX_REALCALL_EXTERN \
+    struct name##_fun_t { \
+        template <typename ... Args> \
+        auto operator()(Args ... args) -> decltype(::name(args ...)) \
+        { \
+            return ::name(args ...); \
+        } \
+    } name
+
+#define DLSYM_FUN_VA_ARGS DLSYM_FUN
+#else
 #define DLSYM_FUN(name, ...) IP2UNIX_REALCALL_EXTERN \
     struct name##_fun_t : public DlsymFun<name##_fun_t, __VA_ARGS__> { \
         static constexpr const char *fname = #name; \
@@ -70,6 +87,7 @@ namespace real {
     struct name##_fun_t : public DlsymFunVaArgs<name##_fun_t, __VA_ARGS__> { \
         static constexpr const char *fname = #name; \
     } name
+#endif
 
     DLSYM_FUN(accept, int, int, struct sockaddr*, socklen_t*);
 #ifdef __linux__
