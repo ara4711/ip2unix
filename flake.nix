@@ -5,12 +5,17 @@
     inherit (nixpkgs) lib;
     nixpkgsSystems = lib.attrNames nixpkgs.legacyPackages;
 
-    systems = lib.filter (lib.hasSuffix "-linux") nixpkgsSystems;
+    linuxSystems  = lib.filter (lib.hasSuffix "-linux") nixpkgsSystems;
+    darwinSystems = lib.filter (lib.hasSuffix "-darwin") nixpkgsSystems;
+    allSystems    = linuxSystems ++ darwinSystems;
+
     hydraSystems = [ "i686-linux" "x86_64-linux" "aarch64-linux" ];
     vmTestSystems = [ "x86_64-linux" ];
 
-    withPkgs = f: forAllSystems (sys: f sys nixpkgs.legacyPackages.${sys});
-    forAllSystems = lib.genAttrs systems;
+    # The package builds everywhere; checks, Hydra and VM tests are Linux-only.
+    withPkgs = f: lib.genAttrs allSystems
+      (sys: f sys nixpkgs.legacyPackages.${sys});
+    forAllSystems = lib.genAttrs linuxSystems;
 
     # This is with all the *required* dependencies only.
     withSystem = fun: system: let
@@ -178,11 +183,19 @@
           pkgs.meson pkgs.ninja pkgs.pkg-config pkgs.asciidoc pkgs.libxslt.bin
           pkgs.docbook_xml_dtd_45 pkgs.docbook_xsl pkgs.libxml2.bin
           pkgs.docbook5 pkgs.python3Packages.pytest
-          pkgs.python3Packages.pytest-timeout pkgs.systemd
-        ];
+          pkgs.python3Packages.pytest-timeout
+        ] ++ lib.optional pkgs.stdenv.isLinux pkgs.systemd;
         buildInputs = [ pkgs.yaml-cpp ];
 
+        mesonFlags = lib.optional pkgs.stdenv.isDarwin "-Dsystemd-support=false";
+
         doCheck = true;
+
+        # sun_path caps socket paths at 104 bytes on Darwin; the default
+        # build TMPDIR is too deep, so use a short one.
+        preCheck = lib.optionalString pkgs.stdenv.isDarwin ''
+          export TMPDIR=$(mktemp -d /tmp/i2u.XXXXXX)
+        '';
 
         doInstallCheck = true;
         installCheckPhase = ''
@@ -194,9 +207,9 @@
             echo "ERROR: Manual page hasn't been generated." >&2
             exit 1
           fi
-
+        '' + lib.optionalString pkgs.stdenv.isLinux ''
           # Make sure we don't accidentally export symbols that we don't want
-          # to expose.
+          # to expose. ELF version-script only; Darwin uses interpose tuples.
           diff -u <(
             find "$src/src" -iname '*.cc' -type f -exec sed -n \
               -e '/^ *#/!s/^.*\(WRAP\|EXPORT\)_SYM(\([^)]\+\)).*/\2/p' \
