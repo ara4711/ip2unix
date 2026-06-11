@@ -7,7 +7,9 @@
 #include <cstdio>
 #include <cstring>
 
+#ifdef __linux__
 #include <asm/sockios.h>
+#endif
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
@@ -52,6 +54,7 @@ void SockOpts::cache_epoll_ctl(int epfd, int op, struct epoll_event *event)
 
 static bool copy_fd_owner(int old_sockfd, int new_sockfd)
 {
+#ifdef F_GETOWN_EX
     f_owner_ex owner;
 
     if (fcntl(old_sockfd, F_GETOWN_EX, &owner) == -1) {
@@ -65,6 +68,25 @@ static bool copy_fd_owner(int old_sockfd, int new_sockfd)
                    << new_sockfd << ": " << strerror(errno);
         return false;
     }
+#else
+    /* No F_GETOWN_EX on Darwin. F_GETOWN can return a negative pgid, so
+     * -1 isn't a reliable error marker - check errno.
+     */
+    errno = 0;
+    int owner = fcntl(old_sockfd, F_GETOWN);
+
+    if (owner == -1 && errno != 0) {
+        LOG(ERROR) << "Failure to get owner settings of socket fd "
+                   << old_sockfd << ": " << strerror(errno);
+        return false;
+    }
+
+    if (fcntl(new_sockfd, F_SETOWN, owner) == -1) {
+        LOG(ERROR) << "Failure to set owner settings on socket fd "
+                   << new_sockfd << ": " << strerror(errno);
+        return false;
+    }
+#endif
 
     return true;
 }
@@ -151,8 +173,10 @@ bool SockOpts::replay(int old_sockfd, int new_sockfd)
         return false;
     if (!copy_fcntl(old_sockfd, new_sockfd, F_GETFL, F_SETFL))
         return false;
+#ifdef F_GETSIG
     if (!copy_fcntl(old_sockfd, new_sockfd, F_GETSIG, F_SETSIG))
         return false;
+#endif
     if (!copy_fd_owner(old_sockfd, new_sockfd))
         return false;
 

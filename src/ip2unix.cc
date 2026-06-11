@@ -32,6 +32,8 @@ static std::optional<std::string> get_preload_libpath(void)
     return std::string(info.dli_fname);
 }
 
+#define PRELOAD_ENV_VAR "LD_PRELOAD"
+
 static bool run_preload(std::vector<Rule> &rules, char *argv[])
 {
     const char *libversion;
@@ -50,17 +52,20 @@ static bool run_preload(std::vector<Rule> &rules, char *argv[])
         return false;
     }
 
-    if ((preload = getenv("LD_PRELOAD")) != nullptr && *preload != '\0') {
+    if ((preload = getenv(PRELOAD_ENV_VAR)) != nullptr && *preload != '\0') {
         std::string new_preload = libpath.value() + ":" + preload;
-        setenv("LD_PRELOAD", new_preload.c_str(), 1);
+        setenv(PRELOAD_ENV_VAR, new_preload.c_str(), 1);
     } else {
-        setenv("LD_PRELOAD", libpath.value().c_str(), 1);
+        setenv(PRELOAD_ENV_VAR, libpath.value().c_str(), 1);
     }
 
     setenv("__IP2UNIX_RULES", serialise(rules).c_str(), 1);
 
-    if (execvpe(argv[0], argv, environ) == -1) {
-        std::string err = "execvpe(\"" + std::string(argv[0]) + "\")";
+    /* execvp(file, argv) is equivalent to the GNU-only
+     * execvpe(file, argv, environ) and exists on Darwin as well.
+     */
+    if (execvp(argv[0], argv) == -1) {
+        std::string err = "execvp(\"" + std::string(argv[0]) + "\")";
         perror(err.c_str());
     }
 

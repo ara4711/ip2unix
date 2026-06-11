@@ -136,7 +136,7 @@ bool SockAddr::set_host(const SockAddr &other)
     return false;
 }
 
-bool SockAddr::set_host(const ucred &peercred)
+bool SockAddr::set_host(const PeerCred &peercred)
 {
     if (this->is_inet4()) {
         this->cast4()->sin_addr.s_addr =

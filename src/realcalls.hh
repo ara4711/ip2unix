@@ -72,13 +72,17 @@ namespace real {
     } name
 
     DLSYM_FUN(accept, int, int, struct sockaddr*, socklen_t*);
+#ifdef __linux__
     DLSYM_FUN(accept4, int, int, struct sockaddr*, socklen_t*, int);
+#endif
     DLSYM_FUN(bind, int, int, const struct sockaddr*, socklen_t);
     DLSYM_FUN(close, int, int);
     DLSYM_FUN(connect, int, int, const struct sockaddr*, socklen_t);
     DLSYM_FUN(dup, int, int);
     DLSYM_FUN(dup2, int, int, int);
+#ifdef __linux__
     DLSYM_FUN(dup3, int, int, int, int);
+#endif
     DLSYM_FUN(getpeername, int, int, struct sockaddr*, socklen_t*);
     DLSYM_FUN(getsockname, int, int, struct sockaddr*, socklen_t*);
     DLSYM_FUN(ioctl, int, int, unsigned long, const void*);

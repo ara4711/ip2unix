@@ -18,6 +18,16 @@
 struct sockaddr_in6;
 struct sockaddr_in;
 
+/* Portable subset of peer credentials, filled from SO_PEERCRED (Linux) or
+ * LOCAL_PEERCRED + LOCAL_PEERPID (Darwin) at the call sites.
+ */
+struct PeerCred
+{
+    pid_t pid;
+    uid_t uid;
+    gid_t gid;
+};
+
 struct SockAddr
 {
     SockAddr();
@@ -29,7 +39,7 @@ struct SockAddr
 
     std::optional<std::string> get_host(void) const;
     bool set_host(const std::string&);
-    bool set_host(const ucred&);
+    bool set_host(const PeerCred&);
     bool set_host(const SockAddr&);
 
     bool set_random_host(void);

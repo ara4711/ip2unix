@@ -106,6 +106,9 @@ extern "C" int WRAP_SYM(socket)(int domain, int type, int protocol)
 {
     TRACE_CALL("socket", domain, type, protocol);
 
+    if (!g_initialised)
+        return real::socket(domain, type, protocol);
+
     int fd = real::socket(domain, type, protocol);
     if (fd != -1 && (domain == AF_INET || domain == AF_INET6 ||
                      domain == AF_UNIX))
@@ -122,6 +125,9 @@ extern "C" int WRAP_SYM(setsockopt)(int sockfd, int level, int optname,
 {
     TRACE_CALL("setsockopt", sockfd, level, optname, optval, optlen);
 
+    if (!g_initialised)
+        return real::setsockopt(sockfd, level, optname, optval, optlen);
+
     // NOLINTNEXTLINE(performance-unnecessary-value-param)
     return Socket::when<int>(sockfd, [&](Socket::Ptr sock) {
         if (sock->rewrite_peer_address)
@@ -135,6 +141,9 @@ extern "C" int WRAP_SYM(setsockopt)(int sockfd, int level, int optname,
 extern "C" int WRAP_SYM(ioctl)(int fd, unsigned long request, void *arg)
 {
     TRACE_CALL("ioctl", fd, request, arg);
+
+    if (!g_initialised)
+        return real::ioctl(fd, request, arg);
 
     // NOLINTNEXTLINE(performance-unnecessary-value-param)
     return Socket::when<int>(fd, [&](Socket::Ptr sock) {
@@ -171,6 +180,9 @@ extern "C" int WRAP_SYM(epoll_ctl)(int epfd, int op, int fd,
 extern "C" int WRAP_SYM(listen)(int sockfd, int backlog)
 {
     TRACE_CALL("listen", sockfd, backlog);
+
+    if (!g_initialised)
+        return real::listen(sockfd, backlog);
 
     // NOLINTNEXTLINE(performance-unnecessary-value-param)
     return Socket::when<int>(sockfd, [&](Socket::Ptr sock) {
@@ -417,20 +429,35 @@ extern "C" int WRAP_SYM(connect)(int fd, const struct sockaddr *addr,
                         fd, addr, addrlen);
 }
 
+/* No accept4() on Darwin; the accept4 wrapper is Linux-only so flags == 0. */
+static int real_accept4(int fd, struct sockaddr *addr, socklen_t *addrlen,
+                        int flags)
+{
+#ifdef __linux__
+    return real::accept4(fd, addr, addrlen, flags);
+#else
+    (void)flags;
+    return real::accept(fd, addr, addrlen);
+#endif
+}
+
 static int handle_accept(int fd, struct sockaddr *addr, socklen_t *addrlen,
                          int flags)
 {
+    if (!g_initialised)
+        return real_accept4(fd, addr, addrlen, flags);
+
     // NOLINTNEXTLINE(performance-unnecessary-value-param)
     return Socket::when<int>(fd, [&](Socket::Ptr sock) {
         if (sock->rewrite_peer_address) {
-            int accfd = real::accept4(fd, nullptr, nullptr, flags);
+            int accfd = real_accept4(fd, nullptr, nullptr, flags);
             if (accfd >= 0)
                 return sock->accept(accfd, addr, addrlen);
             return accfd;
         }
-        return real::accept4(fd, addr, addrlen, flags);
+        return real_accept4(fd, addr, addrlen, flags);
     }, [&]() {
-        return real::accept4(fd, addr, addrlen, flags);
+        return real_accept4(fd, addr, addrlen, flags);
     });
 }
 
@@ -441,17 +468,22 @@ extern "C" int WRAP_SYM(accept)(int fd, struct sockaddr *addr,
     return handle_accept(fd, addr, addrlen, 0);
 }
 
+#ifdef __linux__
 extern "C" int WRAP_SYM(accept4)(int fd, struct sockaddr *addr,
                                  socklen_t *addrlen, int flags)
 {
     TRACE_CALL("accept4", fd, addr, addrlen, flags);
     return handle_accept(fd, addr, addrlen, flags);
 }
+#endif
 
 extern "C" int WRAP_SYM(getpeername)(int fd, struct sockaddr *addr,
                                      socklen_t *addrlen)
 {
     TRACE_CALL("getpeername", fd, addr, addrlen);
+
+    if (!g_initialised)
+        return real::getpeername(fd, addr, addrlen);
 
     // NOLINTNEXTLINE(performance-unnecessary-value-param)
     return Socket::when<int>(fd, [&](Socket::Ptr sock) {
@@ -467,6 +499,9 @@ extern "C" int WRAP_SYM(getsockname)(int fd, struct sockaddr *addr,
                                      socklen_t *addrlen)
 {
     TRACE_CALL("getsockname", fd, addr, addrlen);
+
+    if (!g_initialised)
+        return real::getsockname(fd, addr, addrlen);
 
     // NOLINTNEXTLINE(performance-unnecessary-value-param)
     return Socket::when<int>(fd, [&](Socket::Ptr sock) {
@@ -484,7 +519,7 @@ extern "C" ssize_t WRAP_SYM(recvfrom)(int fd, void *buf, size_t len, int flags,
 {
     TRACE_CALL("recvfrom", fd, buf, len, flags, addr, addrlen);
 
-    if (addr == nullptr)
+    if (!g_initialised || addr == nullptr)
         return real::recvfrom(fd, buf, len, flags, addr, addrlen);
 
     // NOLINTNEXTLINE(performance-unnecessary-value-param)
@@ -511,7 +546,7 @@ extern "C" ssize_t WRAP_SYM(recvmsg)(int fd, struct msghdr *msg, int flags)
 {
     TRACE_CALL("recvmsg", fd, msg, flags);
 
-    if (msg->msg_name == nullptr)
+    if (!g_initialised || msg->msg_name == nullptr)
         return real::recvmsg(fd, msg, flags);
 
     // NOLINTNEXTLINE(performance-unnecessary-value-param)
@@ -658,6 +693,9 @@ extern "C" int WRAP_SYM(dup)(int oldfd)
 {
     TRACE_CALL("dup", oldfd);
 
+    if (!g_initialised)
+        return real::dup(oldfd);
+
     // NOLINTNEXTLINE(performance-unnecessary-value-param)
     return Socket::when<int>(oldfd, [&](Socket::Ptr sock) {
         return sock->dup();
@@ -666,16 +704,27 @@ extern "C" int WRAP_SYM(dup)(int oldfd)
     });
 }
 
+/* No dup3() on Darwin; the dup3 wrapper is Linux-only so flags == 0. */
+static int real_dup3(int oldfd, int newfd, int flags)
+{
+#ifdef __linux__
+    return real::dup3(oldfd, newfd, flags);
+#else
+    (void)flags;
+    return real::dup2(oldfd, newfd);
+#endif
+}
+
 static int handle_dup3(int oldfd, int newfd, int flags)
 {
-    if (oldfd == newfd)
-        return real::dup3(oldfd, newfd, flags);
+    if (!g_initialised || oldfd == newfd)
+        return real_dup3(oldfd, newfd, flags);
 
     // NOLINTNEXTLINE(performance-unnecessary-value-param)
     return Socket::when<int>(oldfd, [&](Socket::Ptr sock) {
         return sock->dup(newfd, flags);
     }, [&]() {
-        return real::dup3(oldfd, newfd, flags);
+        return real_dup3(oldfd, newfd, flags);
     });
 }
 
@@ -685,11 +734,13 @@ extern "C" int WRAP_SYM(dup2)(int oldfd, int newfd)
     return handle_dup3(oldfd, newfd, 0);
 }
 
+#ifdef __linux__
 extern "C" int WRAP_SYM(dup3)(int oldfd, int newfd, int flags)
 {
     TRACE_CALL("dup3", oldfd, newfd, flags);
     return handle_dup3(oldfd, newfd, flags);
 }
+#endif
 
 extern "C" int WRAP_SYM(close)(int fd)
 {

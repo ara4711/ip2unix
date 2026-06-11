@@ -15,6 +15,10 @@
 #include <stdint.h>
 #include <unistd.h>
 
+#if defined(__APPLE__)
+#include <sys/ucred.h>
+#endif
+
 std::optional<Socket::Ptr> Socket::find(int fd)
 {
     using itype = decltype(Socket::registry)::const_iterator;
@@ -274,7 +278,7 @@ bool Socket::create_binding(const SockAddr &addr)
         if (!local.set_host(addr))
             return false;
     } else {
-        ucred local_cred;
+        PeerCred local_cred;
         local_cred.uid = getuid();
         local_cred.gid = getgid();
         local_cred.pid = getpid();
@@ -481,13 +485,41 @@ int Socket::accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen)
             return -1;
         }
     } else {
-        // We use SO_PEERCRED to get uid, gid and pid in order to generate
+        // We use peer credentials (uid, gid and pid) in order to generate
         // unique IP addresses.
-        ucred peercred;
-        socklen_t len = sizeof peercred;
+        PeerCred peercred;
 
-        if (getsockopt(sockfd, SOL_SOCKET, SO_PEERCRED, &peercred, &len) == -1)
+#if defined(SO_PEERCRED)
+        ucred cred;
+        socklen_t len = sizeof cred;
+
+        if (getsockopt(sockfd, SOL_SOCKET, SO_PEERCRED, &cred, &len) == -1)
             return -1;
+
+        peercred.pid = cred.pid;
+        peercred.uid = cred.uid;
+        peercred.gid = cred.gid;
+#else
+        // Darwin: LOCAL_PEERCRED carries uid/groups but no pid, which we
+        // get separately via LOCAL_PEERPID.
+        xucred cred;
+        socklen_t len = sizeof cred;
+
+        if (getsockopt(sockfd, SOL_LOCAL, LOCAL_PEERCRED, &cred, &len) == -1)
+            return -1;
+
+        pid_t peerpid;
+        socklen_t pidlen = sizeof peerpid;
+
+        if (getsockopt(sockfd, SOL_LOCAL, LOCAL_PEERPID, &peerpid,
+                       &pidlen) == -1)
+            return -1;
+
+        peercred.pid = peerpid;
+        peercred.uid = cred.cr_uid;
+        peercred.gid = cred.cr_ngroups > 0 ? cred.cr_groups[0]
+                                           : static_cast<gid_t>(0);
+#endif
 
         if (!peer.set_host(peercred)) {
             errno = EINVAL;
@@ -649,7 +681,13 @@ int Socket::dup(int newfd, int flags)
     if (existing)
         existing.value()->close();
 
+#ifdef __linux__
     int ret = real::dup3(this->fd, newfd, flags);
+#else
+    /* No dup3() on Darwin; flags == 0 here (dup3 wrapper is Linux-only). */
+    (void)flags;
+    int ret = real::dup2(this->fd, newfd);
+#endif
     if (ret != -1) {
         LOG(INFO) << "Duplicated socket fd " << this->fd
                   << " to " << newfd << '.';
