@@ -1,5 +1,6 @@
 import json
 import subprocess
+import sys
 
 from contextlib import contextmanager
 
@@ -8,8 +9,14 @@ from conftest import IP2UNIX, LIBIP2UNIX, SYSTEMD_SUPPORT, SYSTEMD_SA_PATH, \
                      ABSTRACT_SUPPORT
 
 __all__ = ['IP2UNIX', 'LIBIP2UNIX', 'SYSTEMD_SUPPORT', 'SYSTEMD_SA_PATH',
-           'ABSTRACT_SUPPORT', 'ip2unix', 'systemd_only', 'non_systemd_only',
-           'systemd_sa_helper_only', 'abstract_sockets_only']
+           'ABSTRACT_SUPPORT', 'PRELOAD_ENV_VAR', 'ip2unix', 'systemd_only',
+           'non_systemd_only', 'systemd_sa_helper_only',
+           'abstract_sockets_only']
+
+if sys.platform == 'darwin':
+    PRELOAD_ENV_VAR = 'DYLD_INSERT_LIBRARIES'
+else:
+    PRELOAD_ENV_VAR = 'LD_PRELOAD'
 
 
 @contextmanager

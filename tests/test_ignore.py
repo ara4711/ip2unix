@@ -3,31 +3,32 @@ import sys
 
 from helper import IP2UNIX
 
+# 127.0.0.127 isn't loopback on Darwin, only 127.0.0.1 is.
 TESTPROG = '''
 import socket
 import errno
 
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client:
     try:
-        client.connect(('127.0.0.127', 9999))
+        client.connect(('127.0.0.1', 9999))
     except OSError as e:
         assert e.errno != 9999
 
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
     try:
-        server.bind(('127.0.0.127', 9999))
+        server.bind(('127.0.0.1', 9999))
     except OSError as e:
         assert e.errno != 9999
 
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client:
     try:
-        client.connect(('127.0.0.127', 1234))
+        client.connect(('127.0.0.1', 1234))
     except OSError as e:
         assert e.errno == 9999
 
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
     try:
-        server.bind(('127.0.0.127', 4321))
+        server.bind(('127.0.0.1', 4321))
     except OSError as e:
         assert e.errno == 9999
 '''

@@ -1,5 +1,6 @@
 import argparse
 import concurrent.futures
+import multiprocessing
 import socket
 import socketserver
 import sys
@@ -118,12 +119,16 @@ if __name__ == '__main__':
             server.shutdown()
     else:
         if args.method == 'threading':
-            pool = concurrent.futures.ThreadPoolExecutor
+            executor = concurrent.futures.ThreadPoolExecutor(
+                max_workers=args.parallel)
         elif args.method == 'forking':
-            pool = concurrent.futures.ProcessPoolExecutor
+            # Force 'fork'; Darwin's default 'spawn' can't pickle the local fn.
+            executor = concurrent.futures.ProcessPoolExecutor(
+                max_workers=args.parallel,
+                mp_context=multiprocessing.get_context('fork'))
         else:
             raise Exception('Unknown process method')
-        with pool(max_workers=args.parallel) as executor:
+        with executor:
             def cfun(iteration):
                 return client(args.address, args.port, args.sotype, family)
             assert all(executor.map(cfun, range(args.clients)))

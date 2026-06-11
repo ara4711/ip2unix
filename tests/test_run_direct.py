@@ -24,7 +24,7 @@ def test_run_direct(tmpdir):
     cmd = [sys.executable, '-c', TESTPROG]
 
     env = {
-        'LD_PRELOAD': helper.LIBIP2UNIX,
+        helper.PRELOAD_ENV_VAR: helper.LIBIP2UNIX,
         'IP2UNIX_RULE_FILE': str(rulefile),
     }
 
@@ -46,7 +46,7 @@ def test_run_direct(tmpdir):
 
 def test_run_direct_fail():
     cmd = [sys.executable, '-c', TESTPROG]
-    env = {'LD_PRELOAD': helper.LIBIP2UNIX}
+    env = {helper.PRELOAD_ENV_VAR: helper.LIBIP2UNIX}
 
     with subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE,
                           stderr=subprocess.PIPE) as proc:
@@ -57,7 +57,7 @@ def test_run_direct_fail():
 
 def test_run_direct_invalid_rules():
     cmd = [sys.executable, '-c', TESTPROG]
-    env = {'LD_PRELOAD': helper.LIBIP2UNIX, '__IP2UNIX_RULES': '{'}
+    env = {helper.PRELOAD_ENV_VAR: helper.LIBIP2UNIX, '__IP2UNIX_RULES': '{'}
 
     with subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE,
                           stderr=subprocess.PIPE) as proc:

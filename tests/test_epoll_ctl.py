@@ -1,7 +1,13 @@
+import select
 import subprocess
 import sys
 
+import pytest
+
 from helper import IP2UNIX
+
+pytestmark = pytest.mark.skipif(not hasattr(select, 'epoll'),
+                                reason='epoll is only available on Linux')
 
 TESTPROG = '''
 import socket

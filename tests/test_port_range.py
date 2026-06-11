@@ -10,7 +10,7 @@ TESTPROG = r'''
 import sys
 import socket
 
-from multiprocessing import Pool
+import multiprocessing
 
 def run_server(arg):
     identifier, addr = arg
@@ -30,7 +30,8 @@ srvmap = {
     'outside2': ('1.2.3.4', 2001),
 }
 
-pool = Pool(processes=len(srvmap))
+# Force 'fork'; Darwin's default 'spawn' re-imports __main__ (fails for python -c).
+pool = multiprocessing.get_context('fork').Pool(processes=len(srvmap))
 assert all(pool.map(run_server, srvmap.items()))
 sys.stdout.write('DONE\n')
 sys.stdout.flush()

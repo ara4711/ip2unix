@@ -2,7 +2,7 @@ import json
 import sys
 import subprocess
 
-from helper import IP2UNIX, LIBIP2UNIX
+from helper import IP2UNIX, LIBIP2UNIX, PRELOAD_ENV_VAR
 
 
 def check_error(cmd):
@@ -77,8 +77,9 @@ def test_version_shortopt_fail():
 
 
 def test_existing_ld_preload():
-    testprog = "import os; print(os.environ['LD_PRELOAD'])"
+    # Seed with the lib itself: dyld aborts on an unloadable inserted lib.
+    testprog = "import os; print(os.environ['" + PRELOAD_ENV_VAR + "'])"
     cmd = [IP2UNIX, '-r', 'path=/foo', sys.executable, '-c', testprog]
-    output = subprocess.check_output(cmd, env={'LD_PRELOAD': '/nonexistent'})
-    expect = LIBIP2UNIX + ":/nonexistent"
+    output = subprocess.check_output(cmd, env={PRELOAD_ENV_VAR: LIBIP2UNIX})
+    expect = LIBIP2UNIX + ":" + LIBIP2UNIX
     assert output.decode().strip() == expect

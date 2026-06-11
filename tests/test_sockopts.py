@@ -3,7 +3,16 @@ import sys
 
 from pathlib import Path
 
+import pytest
+
 from helper import IP2UNIX
+
+# Darwin delivers O_ASYNC SIGIO eagerly, not on Linux listener semantics.
+pytestmark = pytest.mark.skipif(
+    sys.platform == 'darwin',
+    reason='Darwin delivers O_ASYNC SIGIO eagerly, not on Linux listener '
+           'semantics'
+)
 
 TESTPROG = '''
 import array
