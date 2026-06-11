@@ -488,6 +488,7 @@ int Socket::accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen)
         // We use peer credentials (uid, gid and pid) in order to generate
         // unique IP addresses.
         PeerCred peercred;
+        bool have_peercred = true;
 
 #if defined(SO_PEERCRED)
         ucred cred;
@@ -500,28 +501,32 @@ int Socket::accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen)
         peercred.uid = cred.uid;
         peercred.gid = cred.gid;
 #else
-        // Darwin: LOCAL_PEERCRED carries uid/groups but no pid, which we
-        // get separately via LOCAL_PEERPID.
+        /* Darwin: LOCAL_PEERCRED gives uid/groups, LOCAL_PEERPID the pid.
+         * Both return ENOTCONN once the peer disconnected (the accepted
+         * conn is still valid), so fall back to a random host address.
+         */
         xucred cred;
         socklen_t len = sizeof cred;
-
-        if (getsockopt(sockfd, SOL_LOCAL, LOCAL_PEERCRED, &cred, &len) == -1)
-            return -1;
-
         pid_t peerpid;
         socklen_t pidlen = sizeof peerpid;
 
-        if (getsockopt(sockfd, SOL_LOCAL, LOCAL_PEERPID, &peerpid,
-                       &pidlen) == -1)
+        if (getsockopt(sockfd, SOL_LOCAL, LOCAL_PEERCRED, &cred,
+                       &len) == 0 &&
+            getsockopt(sockfd, SOL_LOCAL, LOCAL_PEERPID, &peerpid,
+                       &pidlen) == 0) {
+            peercred.pid = peerpid;
+            peercred.uid = cred.cr_uid;
+            peercred.gid = cred.cr_ngroups > 0 ? cred.cr_groups[0]
+                                               : static_cast<gid_t>(0);
+        } else if (errno == ENOTCONN) {
+            have_peercred = false;
+        } else {
             return -1;
-
-        peercred.pid = peerpid;
-        peercred.uid = cred.cr_uid;
-        peercred.gid = cred.cr_ngroups > 0 ? cred.cr_groups[0]
-                                           : static_cast<gid_t>(0);
+        }
 #endif
 
-        if (!peer.set_host(peercred)) {
+        if (have_peercred ? !peer.set_host(peercred)
+                          : !peer.set_random_host()) {
             errno = EINVAL;
             return -1;
         }

@@ -22,6 +22,7 @@
 #include <vector>
 
 #include <errno.h>
+#include <stdarg.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -138,8 +139,24 @@ extern "C" int WRAP_SYM(setsockopt)(int sockfd, int level, int optname,
     });
 }
 
-extern "C" int WRAP_SYM(ioctl)(int fd, unsigned long request, void *arg)
+/* ioctl() is variadic; on Apple arm64 varargs go on the stack while fixed
+ * params go in registers, so the wrapper must be variadic too and fetch the
+ * arg via va_arg. Kept to one WRAP_SYM line (via the macro) so gensyms.py
+ * counts the symbol once.
+ */
+#ifdef __APPLE__
+#define IP2UNIX_IOCTL_ARG ...
+#else
+#define IP2UNIX_IOCTL_ARG void *arg
+#endif
+extern "C" int WRAP_SYM(ioctl)(int fd, unsigned long request, IP2UNIX_IOCTL_ARG)
 {
+#ifdef __APPLE__
+    va_list ap;
+    va_start(ap, request);
+    void *arg = va_arg(ap, void*);
+    va_end(ap);
+#endif
     TRACE_CALL("ioctl", fd, request, arg);
 
     if (!g_initialised)

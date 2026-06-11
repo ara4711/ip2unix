@@ -31,14 +31,45 @@ static std::string describe_nodetype(const YAML::Node &node)
     return "an unknown type";
 }
 
+/* BSD inet_pton() is laxer than glibc: it accepts IPv4 octets with leading
+ * zeros ("0.00.0.0") and overlong IPv6 groups ("01000::"). Enforce the
+ * strict glibc behaviour on all platforms.
+ */
+static bool strict_inet_pton(int af, const char *addr, void *buf)
+{
+    if (inet_pton(af, addr, buf) != 1)
+        return false;
+
+    if (af == AF_INET) {
+        bool octet_start = true;
+        for (const char *p = addr; *p != '\0'; ++p) {
+            if (octet_start && p[0] == '0' && p[1] >= '0' && p[1] <= '9')
+                return false;
+            octet_start = *p == '.';
+        }
+    } else {
+        size_t group_len = 0;
+        for (const char *p = addr; *p != '\0'; ++p) {
+            if (*p == ':')
+                group_len = 0;
+            else if (*p == '.')
+                break; // IPv4-mapped tail, already validated by inet_pton
+            else if (++group_len > 4)
+                return false;
+        }
+    }
+
+    return true;
+}
+
 static std::optional<std::string> validate_rule(Rule &rule)
 {
     if (rule.matches.address) {
         char buf[INET6_ADDRSTRLEN];
         const char *addr = rule.matches.address.value().c_str();
         if (
-            inet_pton(AF_INET, addr, buf) == 0 &&
-            inet_pton(AF_INET6, addr, buf) == 0
+            !strict_inet_pton(AF_INET, addr, buf) &&
+            !strict_inet_pton(AF_INET6, addr, buf)
         ) {
             return "Address \"" + rule.matches.address.value() + "\""
                    " is not a valid IPv4 or IPv6 address.";
